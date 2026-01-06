@@ -92,7 +92,7 @@ export class PhysicsSystem {
                 // POISON gimmick: destroy ball on contact
                 if (block.gimmick === 'POISON') {
                     ball.isActive = false;
-                    ball.isReturning = true;
+                    // Don't set isReturning here - let Engine handle counting
                     block.hp -= 1;
                     if (this.onCollision) {
                         this.onCollision(nextPos, block.hp <= 0 ? 'DESTROY' : 'HIT', '#a855f7');

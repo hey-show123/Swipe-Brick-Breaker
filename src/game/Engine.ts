@@ -252,6 +252,7 @@ export class Engine {
 
             const ball = this.balls[firedCount];
             ball.isActive = true;
+            ball.isReturning = false; // Ensure clean state
             ball.position = { ...this.launchPos };
             ball.velocity = { ...this.launchVector! };
             firedCount++;
