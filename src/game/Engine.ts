@@ -6,6 +6,15 @@ import { BallEntity, BlockEntity, ItemEntity } from './Entities';
 import { PhysicsSystem } from './Physics';
 import { InputHandler } from './InputHandler';
 import { ParticleSystem } from './Particles';
+import { soundManager } from './SoundManager';
+
+// Theme color lookup
+const THEME_COLORS: { [key: string]: string } = {
+    'cyan': '#06b6d4',
+    'purple': '#a855f7',
+    'green': '#22c55e',
+    'orange': '#f97316',
+};
 
 export class Engine {
     private canvas: HTMLCanvasElement;
@@ -43,6 +52,9 @@ export class Engine {
     private isPaused: boolean = false;
     private aimOffset: number = 0; // For aim line animation
 
+    // Ball Theme Color
+    private ballColor: string = '#06b6d4'; // Default cyan
+
     public onLongTurn: ((isLong: boolean) => void) | null = null;
     public onMetricUpdate: ((score: number, level: number, balls: number) => void) | null = null;
     public onGameOver: ((finalScore: number) => void) | null = null;
@@ -64,33 +76,89 @@ export class Engine {
         this.input = new InputHandler(canvas);
         this.particles = new ParticleSystem();
 
+        // Load ball theme from localStorage
+        this.loadBallTheme();
+
         // Bind Physics Events
         this.physics.onCollision = (pos, type, color) => {
             if (type === 'DESTROY') {
                 // Explosion
                 this.particles.emit(pos.x, pos.y, 20, color || '#fff', 200, 5);
                 this.triggerShake(0.3, 10);
+                soundManager.play('destroy');
             } else {
                 // Spark
                 this.particles.emit(pos.x, pos.y, 5, '#fff', 100, 2);
+                soundManager.play('bounce', 0.5); // Lower volume for wall bounces
             }
         };
 
         // Bind Input Actions
-        // Bind Input Actions
-        this.input.onAim = (pos) => {
+        this.input.onAim = (_start, current) => {
             if (this.phase === GamePhase.AIMING) {
-                // Vector = Cursor - LaunchPos
-                this.aimVector = Vec2.sub(pos, this.launchPos);
+                // Determine targeted position
+                let targetY = current.y;
+
+                // MIRROR AIMING: If touch is below the ball, mirror it above the ball
+                // This allows aiming from the bottom without blocking the view
+                if (current.y > this.launchPos.y) {
+                    targetY = this.launchPos.y - (current.y - this.launchPos.y);
+                }
+
+                // Vector = Target - LaunchPos
+                let vector = { x: current.x - this.launchPos.x, y: targetY - this.launchPos.y };
+
+                // Enforce Upward Shooting
+                // If the target is still too close to the horizontal, nudge it up
+                if (vector.y > -20) {
+                    vector.y = -20;
+                }
+
+                // Protect against pure horizontal shots
+                const angle = Math.atan2(vector.y, vector.x);
+                const minAngle = -Math.PI + 0.15; // roughly -171 deg
+                const maxAngle = -0.15; // roughly -9 deg
+
+                if (angle > maxAngle && angle < Math.PI / 2) {
+                    vector = { x: Math.cos(maxAngle), y: Math.sin(maxAngle) };
+                } else if (angle < minAngle || angle > Math.PI / 2) {
+                    vector = { x: Math.cos(minAngle), y: Math.sin(minAngle) };
+                }
+
+                this.aimVector = vector;
             }
         };
 
-        this.input.onShoot = (pos) => {
+        this.input.onShoot = (_start, current) => {
             if (this.phase === GamePhase.AIMING) {
-                const vector = Vec2.sub(pos, this.launchPos);
-                // Min distance check
-                if (Vec2.mag(vector) > 10) {
-                    this.startShooting(vector);
+                let targetY = current.y;
+                if (current.y > this.launchPos.y) {
+                    targetY = this.launchPos.y - (current.y - this.launchPos.y);
+                }
+
+                let vector = { x: current.x - this.launchPos.x, y: targetY - this.launchPos.y };
+
+                // Enforce Upward Shooting
+                if (vector.y > -20) {
+                    vector.y = -20;
+                }
+
+                const mag = Vec2.mag(vector);
+                if (mag > 20) {
+                    const angle = Math.atan2(vector.y, vector.x);
+                    const minAngle = -Math.PI + 0.15;
+                    const maxAngle = -0.15;
+
+                    let finalAngle = angle;
+                    if (angle > maxAngle && angle < Math.PI / 2) finalAngle = maxAngle;
+                    else if (angle < minAngle || angle > Math.PI / 2) finalAngle = minAngle;
+
+                    const finalVector = {
+                        x: Math.cos(finalAngle) * CONSTANTS.BALL_SPEED,
+                        y: Math.sin(finalAngle) * CONSTANTS.BALL_SPEED
+                    };
+
+                    this.startShooting(finalVector);
                     this.aimVector = { x: 0, y: 0 };
                 }
             }
@@ -167,10 +235,12 @@ export class Engine {
         const blockWidth = (this.width - (CONSTANTS.COLS + 1) * CONSTANTS.BLOCK_GAP) / CONSTANTS.COLS;
         const blockHeight = blockWidth; // Square blocks
 
+        const topPadding = 100; // Balanced padding for header area
+
         this.blocks.forEach(b => {
-            b.updatePosition(blockWidth, blockHeight, CONSTANTS.BLOCK_GAP, CONSTANTS.BLOCK_GAP * 12); // Top padding increased
+            b.updatePosition(blockWidth, blockHeight, CONSTANTS.BLOCK_GAP, topPadding);
         });
-        this.items.forEach(i => i.updatePosition(blockWidth, blockHeight, CONSTANTS.BLOCK_GAP, CONSTANTS.BLOCK_GAP * 12));
+        this.items.forEach(i => i.updatePosition(blockWidth, blockHeight, CONSTANTS.BLOCK_GAP, topPadding));
     }
 
     public start() {
@@ -325,6 +395,7 @@ export class Engine {
                 } else {
                     scoreGain += 100;
                 }
+                soundManager.play('destroy'); // Play sound for each destroyed block
             });
 
             this.blocks = this.blocks.filter(b => b.hp > 0);
@@ -337,13 +408,6 @@ export class Engine {
             // Items Collection
             // Create a safe copy or iterate carefully
             if (this.items && this.items.length > 0) {
-                for (const item of this.items) {
-                    if (item.collected) {
-                        // Schedule +1 ball for NEXT turn
-                        // For now, simpler: increments totalBalls immediately, but effective next reset.
-                        // We should probably show a visual "+1".
-                    }
-                }
                 const collectedCount = this.items.filter(i => i.collected).length;
                 if (collectedCount > 0) {
                     this.totalBalls += collectedCount;
@@ -354,8 +418,12 @@ export class Engine {
 
             // check for returning balls
             this.balls.forEach(ball => {
-                // Skip balls already processed (e.g., killed by POISON)
+                // Skip balls already processed
                 if (ball.isReturning) return;
+
+                // Skip balls that haven't been launched yet (velocity is zero)
+                const hasBeenLaunched = ball.velocity.x !== 0 || ball.velocity.y !== 0;
+                if (!hasBeenLaunched) return;
 
                 if (ball.isActive) {
                     // Check if fell to bottom
@@ -363,16 +431,18 @@ export class Engine {
                         ball.isActive = false;
                         ball.isReturning = true;
                         this.ballsReturned++;
+                        // Return sound removed as requested
 
                         if (!this.launchPosUpdated) {
                             this.nextLaunchPos = { x: ball.position.x, y: this.height - 100 };
                             this.launchPosUpdated = true;
                         }
                     }
-                } else if (!ball.isActive && !ball.isReturning) {
-                    // Ball was killed (e.g., by POISON) but not yet counted
+                } else {
+                    // Ball was killed (e.g., by POISON) - count as returned
                     ball.isReturning = true;
                     this.ballsReturned++;
+                    // Return sound removed as requested
                 }
             });
 
@@ -387,6 +457,12 @@ export class Engine {
     private nextLaunchPos: Vector | null = null;
 
     private endTurn() {
+        // Clear any pending launch interval
+        if (this.launchIntervalId) {
+            clearInterval(this.launchIntervalId);
+            this.launchIntervalId = null;
+        }
+
         this.phase = GamePhase.AIMING;
         if (this.nextLaunchPos) {
             this.launchPos = this.nextLaunchPos;
@@ -426,6 +502,20 @@ export class Engine {
         // Force end turn immediately
         this.endTurn();
         if (this.onLongTurn) this.onLongTurn(false);
+    }
+
+    private loadBallTheme() {
+        const savedTheme = localStorage.getItem('sbb_theme');
+        if (savedTheme && THEME_COLORS[savedTheme]) {
+            this.ballColor = THEME_COLORS[savedTheme];
+        } else {
+            this.ballColor = THEME_COLORS['cyan']; // Default
+        }
+    }
+
+    // Public method to refresh theme (called when shop modal changes theme)
+    public refreshTheme() {
+        this.loadBallTheme();
     }
 
     private moveBlocksDown() {
@@ -565,8 +655,14 @@ export class Engine {
                 color = '#a855f7'; // Purple/Poison
                 icon = '☠️';
             } else {
-                const colorIdx = Math.min(block.hp, CONSTANTS.COLORS.blockGradient.length) - 1;
-                color = CONSTANTS.COLORS.blockGradient[Math.max(0, colorIdx)] || '#fff';
+                // HP-based color cycle (10/100 rule):
+                // Band changes every 10 HP.
+                // Cycle loops every 100 HP.
+                // HP 1-10 = index 0, HP 11-20 = index 1, ..., HP 91-100 = index 9.
+                const band = Math.floor((block.hp - 1) / 10);
+                const gradientIndex = band % CONSTANTS.COLORS.blockGradient.length;
+
+                color = CONSTANTS.COLORS.blockGradient[gradientIndex] || '#fff';
             }
 
             this.ctx.fillStyle = color;
@@ -729,31 +825,14 @@ export class Engine {
             this.ctx.shadowBlur = 0;
         });
 
-        // Draw Ball Trails
-        this.ctx.globalAlpha = 0.3;
-        this.balls.forEach(ball => {
-            if (ball.isActive && ball.velocity) {
-                const trailLength = 5;
-                for (let i = 1; i <= trailLength; i++) {
-                    const alpha = 1 - (i / trailLength);
-                    const size = CONSTANTS.BALL_RADIUS * (1 - i * 0.1);
-                    const offsetX = ball.position.x - ball.velocity.x * i * 0.02;
-                    const offsetY = ball.position.y - ball.velocity.y * i * 0.02;
-
-                    this.ctx.globalAlpha = alpha * 0.4;
-                    this.ctx.fillStyle = CONSTANTS.COLORS.primary;
-                    this.ctx.beginPath();
-                    this.ctx.arc(offsetX, offsetY, size, 0, Math.PI * 2);
-                    this.ctx.fill();
-                }
-            }
-        });
+        // Draw Ball Trails (enhanced with gradient and glow)
         this.ctx.globalAlpha = 1.0;
+        this.ctx.shadowBlur = 0;
 
         // Draw Balls
-        this.ctx.fillStyle = CONSTANTS.COLORS.primary;
+        this.ctx.fillStyle = this.ballColor;
         this.ctx.shadowBlur = 15;
-        this.ctx.shadowColor = CONSTANTS.COLORS.primary;
+        this.ctx.shadowColor = this.ballColor;
 
         this.balls.forEach(ball => {
             if (ball.isActive) {
@@ -767,7 +846,7 @@ export class Engine {
                 this.ctx.beginPath();
                 this.ctx.arc(ball.position.x - 2, ball.position.y - 2, CONSTANTS.BALL_RADIUS * 0.4, 0, Math.PI * 2);
                 this.ctx.fill();
-                this.ctx.fillStyle = CONSTANTS.COLORS.primary;
+                this.ctx.fillStyle = this.ballColor;
             }
         });
         this.ctx.shadowBlur = 0;

@@ -28,8 +28,8 @@ export const ShopModal: React.FC<ShopModalProps> = ({ isOpen, onClose }) => {
     const handleSelect = (id: string) => {
         setSelectedTheme(id);
         localStorage.setItem('sbb_theme', id);
-        // Page reload might be needed to apply theme if not using Context
-        // For now, prompt user or just update localstorage
+        // Dispatch custom event for same-tab listeners
+        window.dispatchEvent(new CustomEvent('sbb_theme_change', { detail: id }));
     };
 
     return (

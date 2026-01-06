@@ -20,6 +20,17 @@ export const CONSTANTS = {
         secondary: '#ff00ff', // Neon Magenta
         accent: '#ffff00', // Neon Yellow
         text: '#ffffff',
-        blockGradient: ['#ff4444', '#ffaa00', '#ffff00', '#00ff00', '#00ffff', '#0044ff'], // HP Heatmap
+        blockGradient: [
+            '#ff4444', // 1-10: Red
+            '#ff8800', // 11-20: Orange-Red
+            '#ffcc00', // 21-30: Yellow-Orange
+            '#ffff00', // 31-40: Yellow
+            '#aaff00', // 41-50: Lime
+            '#00ff00', // 51-60: Green
+            '#00ffaa', // 61-70: Mint
+            '#00ffff', // 71-80: Cyan
+            '#00aaff', // 81-90: Light Blue
+            '#8800ff', // 91-100: Purple
+        ], // HP Heatmap (Loops every 100 HP, changes every 10 HP)
     }
 };

@@ -7,8 +7,8 @@ export class InputHandler {
     private dragStart: Vector = { x: 0, y: 0 };
     private currentDrag: Vector = { x: 0, y: 0 };
 
-    public onAim: ((vector: Vector) => void) | null = null;
-    public onShoot: ((vector: Vector) => void) | null = null;
+    public onAim: ((start: Vector, current: Vector) => void) | null = null;
+    public onShoot: ((start: Vector, current: Vector) => void) | null = null;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -57,12 +57,9 @@ export class InputHandler {
         // The canvas logical size (width/height attributes) might differ from CSS size.
         // We should map to logical size.
 
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-
         return {
-            x: (clientX - rect.left) * scaleX,
-            y: (clientY - rect.top) * scaleY
+            x: (clientX - rect.left),
+            y: (clientY - rect.top)
         };
     }
 
@@ -102,7 +99,7 @@ export class InputHandler {
         // The Engine will calculate the direction vector relative to LaunchPos.
 
         if (this.onAim) {
-            this.onAim(this.currentDrag);
+            this.onAim(this.dragStart, this.currentDrag);
         }
     }
 
@@ -120,9 +117,9 @@ export class InputHandler {
         this.isDragging = false;
         this.currentDrag = this.getPos(e);
 
-        // Release to shoot toward the last cursor position
+        // Release to shoot
         if (this.onShoot) {
-            this.onShoot(this.currentDrag);
+            this.onShoot(this.dragStart, this.currentDrag);
         }
     }
 }

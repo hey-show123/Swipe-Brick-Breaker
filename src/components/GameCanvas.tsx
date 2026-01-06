@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Engine } from '../game/Engine';
 
@@ -35,8 +34,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ onMetricUpdate, onGameOv
 
         engine.start();
 
+        // Listen for theme changes from Shop modal (same tab - custom event)
+        const handleThemeChange = () => {
+            if (engineRef.current) {
+                engineRef.current.refreshTheme();
+            }
+        };
+        window.addEventListener('sbb_theme_change', handleThemeChange);
+
+        // Listen for theme changes from other tabs (cross-tab - storage event)
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'sbb_theme' && engineRef.current) {
+                engineRef.current.refreshTheme();
+            }
+        };
+        window.addEventListener('storage', handleStorageChange);
+
         return () => {
             engine.stop();
+            window.removeEventListener('sbb_theme_change', handleThemeChange);
+            window.removeEventListener('storage', handleStorageChange);
         };
     }, []);
 
