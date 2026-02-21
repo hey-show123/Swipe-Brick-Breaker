@@ -7,6 +7,7 @@ export const CONSTANTS = {
     // Physics
     BALL_SPEED: 800, // Pixels per second (approx 13 px/frame at 60fps)
     TIME_STEP: 1 / 60,
+    INITIAL_BALLS: 3, // Starting ball count for better early-game tempo
 
     // Grid
     COLS: 7, // 7 columns fits well on mobile

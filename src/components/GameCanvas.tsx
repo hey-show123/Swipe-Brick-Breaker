@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Engine } from '../game/Engine';
+import { soundManager } from '../game/SoundManager';
+import type { GameSnapshot } from '../game/types';
 
 interface GameCanvasProps {
     onMetricUpdate?: (score: number, level: number, balls: number) => void;
@@ -7,10 +9,26 @@ interface GameCanvasProps {
     isPaused?: boolean;
 }
 
-export const GameCanvas: React.FC<GameCanvasProps> = ({ onMetricUpdate, onGameOver, isPaused = false }) => {
+export interface GameCanvasHandle {
+    getSnapshot: () => GameSnapshot;
+    restoreFromSnapshot: (snapshot: GameSnapshot) => void;
+}
+
+export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ onMetricUpdate, onGameOver, isPaused = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const engineRef = useRef<Engine | null>(null);
     const [showRecall, setShowRecall] = useState(false);
+
+    useImperativeHandle(ref, () => ({
+        getSnapshot: () => {
+            if (!engineRef.current) throw new Error('Engine not initialized');
+            return engineRef.current.getSnapshot();
+        },
+        restoreFromSnapshot: (snapshot: GameSnapshot) => {
+            if (!engineRef.current) throw new Error('Engine not initialized');
+            engineRef.current.restoreFromSnapshot(snapshot);
+        },
+    }));
 
     useEffect(() => {
         if (!canvasRef.current) return;
@@ -31,6 +49,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ onMetricUpdate, onGameOv
         engine.onGameOver = (score) => {
             if (onGameOver) onGameOver(score);
         };
+
+        // Init Web Audio on first canvas mount (requires prior user gesture from Play button)
+        soundManager.init();
 
         engine.start();
 
@@ -86,4 +107,4 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ onMetricUpdate, onGameOv
             )}
         </div>
     );
-};
+});

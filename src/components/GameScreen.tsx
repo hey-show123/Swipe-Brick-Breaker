@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameCanvas } from './GameCanvas';
+import type { GameCanvasHandle } from './GameCanvas';
 import { StartScreen } from './screens/StartScreen';
 import { GameHUD } from './hud/GameHUD';
 import { GameOverScreen } from './screens/GameOverScreen';
@@ -8,6 +9,8 @@ import { ShopModal } from './screens/ShopModal';
 import { RankingModal } from './screens/RankingModal';
 import bgCyber from '../assets/bg_cyber.png';
 import { PauseMenu } from './screens/PauseMenu';
+import { adMobService } from '../services/AdMobService';
+import type { GameSnapshot } from '../game/types';
 
 type GameState = 'MENU' | 'PLAYING' | 'PAUSED' | 'GAMEOVER';
 
@@ -22,6 +25,27 @@ export const GameScreen: React.FC = () => {
     // Key to force re-mounting of canvas to reset engine
     const [gameId, setGameId] = useState(0);
 
+    // Ad-related state
+    const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
+    const [continueUsed, setContinueUsed] = useState(false);
+    const [showingAd, setShowingAd] = useState(false);
+
+    const canvasRef = useRef<GameCanvasHandle>(null);
+
+    // Initialize AdMob
+    useEffect(() => {
+        adMobService.initialize();
+    }, []);
+
+    // Show/hide banner based on game state
+    useEffect(() => {
+        if (gameState === 'MENU' || gameState === 'GAMEOVER') {
+            adMobService.showBanner();
+        } else {
+            adMobService.hideBanner();
+        }
+    }, [gameState]);
+
     useEffect(() => {
         const saved = localStorage.getItem('sbb_best_score');
         if (saved) {
@@ -33,6 +57,8 @@ export const GameScreen: React.FC = () => {
         setScore(0);
         setLevel(1);
         setBalls(1);
+        setSnapshot(null);
+        setContinueUsed(false);
         setGameId(prev => prev + 1); // Reset Canvas
         setGameState('PLAYING');
     };
@@ -48,14 +74,45 @@ export const GameScreen: React.FC = () => {
         }
     }, [bestScore]);
 
-    const handleGameOver = useCallback((finalScore: number) => {
-        // Ensure score is captured (though metric update usually happens before)
+    const handleGameOver = useCallback(async (finalScore: number) => {
+        // Ensure score is captured
         if (finalScore > bestScore) {
             setBestScore(finalScore);
             localStorage.setItem('sbb_best_score', finalScore.toString());
         }
+
+        // Take snapshot before transitioning to game over (for continue feature)
+        try {
+            if (canvasRef.current) {
+                const snap = canvasRef.current.getSnapshot();
+                setSnapshot(snap);
+            }
+        } catch {
+            // Snapshot may fail if engine is in bad state - continue without it
+        }
+
+        // Show interstitial ad (every 3rd game over)
+        setShowingAd(true);
+        await adMobService.showInterstitialIfReady();
+        setShowingAd(false);
+
         setGameState('GAMEOVER');
     }, [bestScore]);
+
+    const handleContinue = useCallback(async () => {
+        if (!snapshot || continueUsed) return;
+
+        setShowingAd(true);
+        const rewarded = await adMobService.showRewarded();
+        setShowingAd(false);
+
+        if (rewarded && canvasRef.current) {
+            canvasRef.current.restoreFromSnapshot(snapshot);
+            setContinueUsed(true);
+            setSnapshot(null);
+            setGameState('PLAYING');
+        }
+    }, [snapshot, continueUsed]);
 
     const handleRetry = () => {
         handleStart();
@@ -101,8 +158,10 @@ export const GameScreen: React.FC = () => {
         }
     };
 
+    const canContinue = !!snapshot && !continueUsed && !showingAd;
+
     return (
-        <div className="relative w-full h-full md:h-[800px] md:max-w-[480px] mx-auto bg-black shadow-2xl overflow-hidden md:rounded-3xl border border-white/10 ring-8 ring-black">
+        <div className="relative w-full h-full xl:h-[800px] xl:max-w-[480px] mx-auto bg-black shadow-2xl overflow-hidden xl:rounded-3xl border border-white/10 ring-8 ring-black">
 
             {/* Background Layer */}
             <div className="absolute inset-0 z-0">
@@ -145,6 +204,7 @@ export const GameScreen: React.FC = () => {
             {(gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') && (
                 <div className={`absolute inset-0 transition-opacity duration-1000 ${gameState === 'GAMEOVER' ? 'opacity-50' : 'opacity-100'}`}>
                     <GameCanvas
+                        ref={canvasRef}
                         key={gameId}
                         onMetricUpdate={handleMetricUpdate}
                         onGameOver={handleGameOver}
@@ -189,7 +249,16 @@ export const GameScreen: React.FC = () => {
                     onRetry={handleRetry}
                     onHome={handleHome}
                     onShare={handleShare}
+                    onContinue={handleContinue}
+                    canContinue={canContinue}
                 />
+            )}
+
+            {/* Ad Loading Overlay */}
+            {showingAd && (
+                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/50">
+                    <div className="text-white text-lg font-bold animate-pulse">Loading...</div>
+                </div>
             )}
 
             {/* Modals */}

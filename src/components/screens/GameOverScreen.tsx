@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, Home, Trophy, Share2 } from 'lucide-react';
+import { RefreshCw, Home, Trophy, Share2, Play } from 'lucide-react';
 import { GlassButton } from '../common/GlassButton';
 
 interface GameOverScreenProps {
@@ -8,9 +8,11 @@ interface GameOverScreenProps {
     onRetry: () => void;
     onHome: () => void;
     onShare: () => void;
+    onContinue?: () => void;
+    canContinue?: boolean;
 }
 
-export const GameOverScreen: React.FC<GameOverScreenProps> = ({ score, highScore, onRetry, onHome, onShare }) => {
+export const GameOverScreen: React.FC<GameOverScreenProps> = ({ score, highScore, onRetry, onHome, onShare, onContinue, canContinue }) => {
     const isNewRecord = score > highScore;
     const [displayScore, setDisplayScore] = useState(0);
 
@@ -39,7 +41,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({ score, highScore
     }, [score]);
 
     return (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-950/90 backdrop-blur-xl p-6">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-950/90 backdrop-blur-xl p-6 pb-20">
 
             {/* Content Container */}
             <div className="w-full max-w-sm flex flex-col items-center animate-in fade-in zoom-in duration-500">
@@ -72,6 +74,19 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({ score, highScore
 
                 {/* Actions */}
                 <div className="w-full flex flex-col gap-3">
+                    {/* Continue Button (Rewarded Ad) */}
+                    {canContinue && onContinue && (
+                        <GlassButton
+                            onClick={onContinue}
+                            fullWidth
+                            size="lg"
+                            icon={<Play className="w-5 h-5 fill-current" />}
+                            className="shadow-xl shadow-green-900/20 !bg-gradient-to-r !from-green-600/30 !to-emerald-600/30 !border-green-400/30"
+                        >
+                            CONTINUE (Watch Ad)
+                        </GlassButton>
+                    )}
+
                     <GlassButton
                         onClick={onRetry}
                         fullWidth

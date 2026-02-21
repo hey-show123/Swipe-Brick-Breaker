@@ -45,3 +45,28 @@ export interface Particle {
     life: number;
     color: string;
 }
+
+export interface BlockSnapshot {
+    id: string;
+    col: number;
+    row: number;
+    hp: number;
+    maxHp: number;
+    type: Block['type'];
+    gimmick: 'NONE' | 'EXPLOSIVE' | 'GOLD' | 'POISON';
+}
+
+export interface ItemSnapshot {
+    id: string;
+    col: number;
+    row: number;
+}
+
+export interface GameSnapshot {
+    level: number;
+    score: number;
+    totalBalls: number;
+    launchPos: Vector;
+    blocks: BlockSnapshot[];
+    items: ItemSnapshot[];
+}

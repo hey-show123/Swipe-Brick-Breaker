@@ -11,7 +11,7 @@ interface StartScreenProps {
 
 export const StartScreen: React.FC<StartScreenProps> = ({ onStart, onShop, onRank, onSettings }) => {
     return (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-between py-20 pb-24 overflow-hidden">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-between py-20 pb-32 overflow-hidden">
             {/* Dynamic Background Layer */}
 
 

@@ -8,6 +8,7 @@ export class BallEntity implements Ball {
     velocity: Vector;
     isActive: boolean = true;
     isReturning: boolean = false;
+    trail: Vector[] = [];
 
     constructor(id: number, x: number, y: number) {
         this.id = id;
@@ -15,21 +16,18 @@ export class BallEntity implements Ball {
         this.velocity = { x: 0, y: 0 };
     }
 
+    updateTrail() {
+        if (!this.isActive) return;
+        this.trail.unshift({ x: this.position.x, y: this.position.y });
+        if (this.trail.length > 8) this.trail.length = 8;
+    }
+
+    clearTrail() {
+        this.trail.length = 0;
+    }
+
     update(dt: number) {
         if (!this.isActive) return;
-
-        // Euler integration
-        // NewPos = Pos + Vel * Speed * dt
-        // Note: velocity should be normalized direction usually, but here we might store full velocity.
-        // Let's assume 'velocity' is the movement vector per second.
-
-        // const moveStep = Vec2.mul(this.velocity, dt * CONSTANTS.BALL_SPEED * 60);
-        // Actually, let's keep it simple: velocity IS px/sec.
-        // So CONSTANTS.BALL_SPEED should be like 600 px/sec?
-        // In Constants we put "12". If that was "per frame", then per sec is 12 * 60 = 720.
-
-        // Let's rely on the physics system to handle movement to ensure collision detection happens inside the step.
-        // But for basic movement:
         this.position = Vec2.add(this.position, Vec2.mul(this.velocity, dt));
     }
 }
